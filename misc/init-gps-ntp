@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eux
 
+cd "$(dirname "$0")"
+
 su -c 'make gps-pps-00A0.dtbo' drone
 install -m 0644 gps-pps-00A0.dtbo /lib/firmware/gps-pps-00A0.dtbo
 

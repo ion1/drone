@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eux
 
+cd "$(dirname "$0")"
+
 su -c 'make drone-00A0.dtbo' drone
 install -m 0644 drone-00A0.dtbo /lib/firmware/drone-00A0.dtbo
 
