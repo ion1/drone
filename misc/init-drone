@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eux
+
+su -c 'make drone-00A0.dtbo' drone
+install -m 0644 drone-00A0.dtbo /lib/firmware/drone-00A0.dtbo
+
+cd /
+
+slot() {
+  slots=/sys/devices/bone_capemgr.7/slots
+  for d; do
+    if ! grep ",$d\$" "$slots"; then
+      >"$slots" printf "%s\n" "$d"
+    fi
+  done
+}
+
+slot drone
+
+printf '%s\n' 38 >/sys/class/gpio/export
+printf '%s\n' 'in' >/sys/class/gpio/gpio38/direction

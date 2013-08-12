@@ -1,0 +1,34 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+  compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+  part-number = "drone";
+  version = "00A0";
+
+  exclusive-use = "P8.3", "gpio1_6" /* BMP085 EOC */;
+
+  fragment@0 {
+    target = <&am33xx_pinmux>;
+    __overlay__ {
+      bmp085_eoc_pins: pinmux_bmp085_eoc_pins {
+        pinctrl-single,pins = <
+          0x18 0x27 /* P8.3 GPIO1_6 BMP085 EOC */
+        >;
+      };
+    };
+  };
+
+  fragment@1 {
+    target = <&ocp>;
+    __overlay__ {
+      ocp_bmp085_eoc_pins {
+        compatible = "bone-pinmux-helper";
+        pinctrl-names = "default";
+        pinctrl-0 = <&bmp085_eoc_pins>;
+        status = "okay";
+      };
+    };
+  };
+};
