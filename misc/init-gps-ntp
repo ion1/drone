@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eux
+
+su -c 'make gps-pps-00A0.dtbo' drone
+install -m 0644 gps-pps-00A0.dtbo /lib/firmware/gps-pps-00A0.dtbo
+
+cd /
+
+gps_dev=/dev/ttyO2
+
+slot() {
+  slots=/sys/devices/bone_capemgr.7/slots
+  for d; do
+    if ! grep ",$d\$" "$slots"; then
+      >"$slots" printf "%s\n" "$d"
+    fi
+  done
+}
+
+gps() {
+  for c; do
+    >"$gps_dev" printf '\r\n%s\r\n' "$c"
+    sleep 0.5
+  done
+}
+
+slot BB-UART2 gps-pps
+
+stty -F "$gps_dev" 9600
+gps '$PMTK251,115200*1F'
+stty -F "$gps_dev" 115200
+gps '$PMTK220,200*2C' \
+    '$PMTK314,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1*29' \
+    '$PMTK301,2*2E' \
+    '$PMTK313,1*2E' \
+    '$PMTK319,1*24' \
+    '$PMTK397,0*23' \
+    '$PMTK286,1*23' \
+    '$PMTK869,1,1*35'
+
+</dev/null >/dev/null 2>&1 gpsd -G "$gps_dev"
+
+service chrony stop
+service chrony start
