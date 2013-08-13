@@ -12,15 +12,15 @@
 #include "common.h"
 #include "i2c-utilities.h"
 
-#define BMP085_ADDR 0x77
+#define ADDR 0x77
 
-#define BMP085_CALIB_REG 0xaa
+#define CALIB_REG 0xaa
 
-#define BMP085_CTRL_REG  0xf4
-#define BMP085_CTRL_TEMP 0x2e
-#define BMP085_CTRL_PRES 0x34
+#define CTRL_REG  0xf4
+#define CTRL_TEMP 0x2e
+#define CTRL_PRES 0x34
 
-#define BMP085_DATA 0xf6
+#define DATA 0xf6
 
 typedef struct {
   int16_t  ac1, ac2, ac3;
@@ -28,13 +28,13 @@ typedef struct {
   int16_t  b1, b2, mb, mc, md;
 } bmp085_calib_t;
 
-#define BMP085_CALIB_EXAMPLE \
+#define CALIB_EXAMPLE \
   ((bmp085_calib_t){ 408, -72, -14383, 32741, 32757, 23153 \
                    , 6190, 4, -32768, -8711, 2868 \
                    })
-#define BMP085_UT_EXAMPLE  ((int32_t)27898)
-#define BMP085_OSS_EXAMPLE ((int16_t)0)
-#define BMP085_UP_EXAMPLE  ((int32_t)23843)
+#define UT_EXAMPLE  ((int32_t)27898)
+#define OSS_EXAMPLE ((int16_t)0)
+#define UP_EXAMPLE  ((int32_t)23843)
 
 typedef enum { STATE_INITIAL, STATE_TEMP_WAITING, STATE_PRES_WAITING
              , STATE_ERROR }
@@ -93,7 +93,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
     goto open_gpio_failed;
   }
 
-  if (! i2c_slave (i2c_fd, BMP085_ADDR)) {
+  if (! i2c_slave (i2c_fd, ADDR)) {
     *errstr = "bmp085_new: i2c_slave failed";
     *err = errno;
     goto i2c_slave_failed;
@@ -101,7 +101,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
 
   uint16_t calib_data[11];
   for (int i = 0; i < 11; ++i) {
-    if (! i2c_read_u16 (i2c_fd, BMP085_CALIB_REG+2*i, &calib_data[i])) {
+    if (! i2c_read_u16 (i2c_fd, CALIB_REG+2*i, &calib_data[i])) {
       *errstr = "bmp085_new: i2c_read_u16 (calibration) failed";
       *err = errno;
       goto calib_failed;
@@ -213,14 +213,14 @@ bmp085_run ( bmp085_t *const bmp085
 static inline void
 slave (bmp085_t *const bmp085)
 {
-  if (! i2c_slave (bmp085->i2c_fd, BMP085_ADDR))
+  if (! i2c_slave (bmp085->i2c_fd, ADDR))
     bmp085->state = STATE_ERROR;
 }
 
 static void
 measure_temp_start (bmp085_t *const bmp085)
 {
-  if (! i2c_write_u8 (bmp085->i2c_fd, BMP085_CTRL_REG, BMP085_CTRL_TEMP)) {
+  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, CTRL_TEMP)) {
     bmp085->state = STATE_ERROR;
     return;
   }
@@ -231,8 +231,8 @@ measure_temp_start (bmp085_t *const bmp085)
 static void
 measure_pres_start (bmp085_t *const bmp085)
 {
-  uint8_t data = BMP085_CTRL_PRES + (bmp085->oss << 6);
-  if (! i2c_write_u8 (bmp085->i2c_fd, BMP085_CTRL_REG, data)) {
+  uint8_t data = CTRL_PRES + (bmp085->oss << 6);
+  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, data)) {
     bmp085->state = STATE_ERROR;
     return;
   }
@@ -244,7 +244,7 @@ static void
 measure_temp_finish (bmp085_t *const bmp085)
 {
   uint16_t ut;
-  if (! i2c_read_u16 (bmp085->i2c_fd, BMP085_DATA, &ut)) {
+  if (! i2c_read_u16 (bmp085->i2c_fd, DATA, &ut)) {
     bmp085->state = STATE_ERROR;
     return;
   }
@@ -256,7 +256,7 @@ static void
 measure_pres_finish (bmp085_t *const bmp085)
 {
   uint32_t up;
-  if (! i2c_read_u24 (bmp085->i2c_fd, BMP085_DATA, &up)) {
+  if (! i2c_read_u24 (bmp085->i2c_fd, DATA, &up)) {
     bmp085->state = STATE_ERROR;
     return;
   }
