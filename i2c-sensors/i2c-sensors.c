@@ -11,11 +11,13 @@
 #include "bmp085.h"
 #include "common.h"
 #include "l3gd20.h"
+#include "lsm303dlhc-acc.h"
 
 struct i2c_sensors {
   int fd;
   bmp085_t *bmp085;
   l3gd20_t *l3gd20;
+  lsm303dlhc_acc_t *lsm303dlhc_acc;
 };
 
 i2c_sensors_t *
@@ -42,9 +44,16 @@ i2c_sensors_new ( const char *const dev, const int bmp085_eoc_gpio
   if (! (sensors->l3gd20 = l3gd20_new (sensors->fd, errstr, err)))
     goto l3gd20_failed;
 
+  if (! (sensors->lsm303dlhc_acc =
+           lsm303dlhc_acc_new (sensors->fd, errstr, err)))
+    goto lsm303dlhc_acc_failed;
+
   return sensors;
 
 /* everything_failed: */
+  lsm303dlhc_acc_free (sensors->lsm303dlhc_acc);
+
+lsm303dlhc_acc_failed:
   l3gd20_free (sensors->l3gd20);
 
 l3gd20_failed:
@@ -69,6 +78,9 @@ i2c_sensors_free (i2c_sensors_t *const sensors)
   l3gd20_free (sensors->l3gd20);
   sensors->l3gd20 = (l3gd20_t *)POISON;
 
+  lsm303dlhc_acc_free (sensors->lsm303dlhc_acc);
+  sensors->lsm303dlhc_acc = (lsm303dlhc_acc_t *)POISON;
+
   close (sensors->fd);
   sensors->fd = POISON;
 
@@ -91,4 +103,8 @@ i2c_sensors_run (i2c_sensors_t *const sensors)
   double gx = 0, gy = 0, gz = 0;
   if (l3gd20_run (sensors->l3gd20, &gx, &gy, &gz))
     fprintf (stderr, "gx=%.2f gy=%.2f gz=%.2f\n", gx, gy, gz);
+
+  double ax = 0, ay = 0, az = 0;
+  if (lsm303dlhc_acc_run (sensors->lsm303dlhc_acc, &ax, &ay, &az))
+    fprintf (stderr, "ax=%.2f ay=%.2f az=%.2f\n", ax, ay, az);
 }
