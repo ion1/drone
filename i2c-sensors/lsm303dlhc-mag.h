@@ -1,3 +1,5 @@
+/* LSM303DLHC magnetometer */
+
 #ifndef INCLUDE_LSM303DLHC_MAG_H
 #define INCLUDE_LSM303DLHC_MAG_H
 

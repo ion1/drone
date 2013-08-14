@@ -1,3 +1,5 @@
+/* LSM303DLHC accelerometer */
+
 #ifndef INCLUDE_LSM303DLHC_ACC_H
 #define INCLUDE_LSM303DLHC_ACC_H
 

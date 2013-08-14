@@ -1,3 +1,5 @@
+/* L3GD20 gyroscope */
+
 #include <errno.h>
 #include <math.h>
 #include <stdbool.h>

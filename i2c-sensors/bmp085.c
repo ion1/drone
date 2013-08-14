@@ -1,3 +1,5 @@
+/* BMP085 barometer */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>

@@ -1,3 +1,5 @@
+/* BMP085 barometer */
+
 #ifndef INCLUDE_BMP085_H
 #define INCLUDE_BMP085_H
 

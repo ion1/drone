@@ -1,4 +1,7 @@
-/* The same as HMC5883L? */
+/* LSM303DLHC magnetometer
+ *
+ * The same as HMC5883L?
+ */
 
 #include <errno.h>
 #include <stdbool.h>

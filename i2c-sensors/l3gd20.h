@@ -1,3 +1,5 @@
+/* L3GD20 gyroscope */
+
 #ifndef INCLUDE_L3GD20_H
 #define INCLUDE_L3GD20_H
 
