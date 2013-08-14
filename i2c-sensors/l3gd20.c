@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -159,9 +160,9 @@ l3gd20_run ( l3gd20_t *const l3gd20, l3gd20_result_t *const res
     goto error;
 
   /* 70: FS1|FS0
-   * 1000: m°/s to °/s
+   * pi/180000: milli°/s to radian/s
    */
-  double scale = 70.0 / 1000.0;
+  double scale = 70.0 * M_PI/180000.0;
   res->have_result = true;
   res->x = scale * (int16_t)x;
   res->y = scale * (int16_t)y;

@@ -11,8 +11,8 @@ typedef struct bmp085 bmp085_t;
 
 typedef struct {
   bool have_result;
-  int32_t temperature;
-  int32_t pressure;
+  double temperature;  /* °C */
+  double pressure;     /* Pa */
 } bmp085_result_t;
 
 bmp085_t *

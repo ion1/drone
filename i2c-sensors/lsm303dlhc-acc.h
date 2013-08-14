@@ -9,7 +9,7 @@ typedef struct lsm303dlhc_acc lsm303dlhc_acc_t;
 
 typedef struct {
   bool have_result;
-  double x, y, z;
+  double x, y, z;  /* m/s² */
 } lsm303dlhc_acc_result_t;
 
 lsm303dlhc_acc_t *

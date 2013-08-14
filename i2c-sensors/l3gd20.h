@@ -9,7 +9,7 @@ typedef struct l3gd20 l3gd20_t;
 
 typedef struct {
   bool have_result;
-  double x, y, z;
+  double x, y, z;  /* radian/s */
 } l3gd20_result_t;
 
 l3gd20_t *

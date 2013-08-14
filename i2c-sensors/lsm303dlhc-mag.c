@@ -111,10 +111,11 @@ lsm303dlhc_mag_run ( lsm303dlhc_mag_t *const mag
          i2c_read_u16 (mag->fd, OUT_Y_H, &y, err)))
     goto error;
 
-  /* 230, 205: GN2|GN1|GN0
+  /* 1/230, 1/205: GN2|GN1|GN0
+   * 1/10000: gauss to T
    */
-  double scalexy = 1.0/230.0
-       , scalez  = 1.0/205.0;
+  double scalexy = 1.0/(230.0 * 10000.0)
+       , scalez  = 1.0/(205.0 * 10000.0);
   res->have_result = true;
   res->x = scalexy * (int16_t)x;
   res->y = scalexy * (int16_t)y;

@@ -9,7 +9,7 @@ typedef struct lsm303dlhc_mag lsm303dlhc_mag_t;
 
 typedef struct {
   bool have_result;
-  double x, y, z;
+  double x, y, z;  /* T */
 } lsm303dlhc_mag_result_t;
 
 lsm303dlhc_mag_t *

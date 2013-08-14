@@ -121,7 +121,7 @@ i2c_sensors_run (i2c_sensors_t *const sensors, error_t *const err)
     goto error;
 
   if (baro_res.have_result)
-    fprintf ( stderr, "t=%d p=%d\n"
+    fprintf ( stderr, "t=%.1f p=%.0f\n"
             , baro_res.temperature, baro_res.pressure );
 
   if (gyro_res.have_result)

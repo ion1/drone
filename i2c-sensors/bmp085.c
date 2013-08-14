@@ -327,6 +327,6 @@ calculate (const bmp085_t *const bmp085, bmp085_result_t *const res)
   int32_t pb  = pa + ((x1e + x2e + 3791) >> 4);
 
   res->have_result = true;
-  res->temperature = t;
+  res->temperature = t / 10.0;  /* deci°C to °C */
   res->pressure    = pb;
 }
