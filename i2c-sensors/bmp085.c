@@ -10,6 +10,7 @@
 #include "bmp085.h"
 
 #include "common.h"
+#include "error-utilities.h"
 #include "i2c-utilities.h"
 
 #define ADDR 0x77
@@ -36,8 +37,7 @@ typedef struct {
 #define OSS_EXAMPLE ((int16_t)0)
 #define UP_EXAMPLE  ((int32_t)23843)
 
-typedef enum { STATE_INITIAL, STATE_TEMP_WAITING, STATE_PRES_WAITING
-             , STATE_ERROR }
+typedef enum { STATE_INITIAL, STATE_TEMP_WAITING, STATE_PRES_WAITING }
   bmp085_state_t;
 
 struct bmp085 {
@@ -49,29 +49,29 @@ struct bmp085 {
   bmp085_calib_t calib;
 };
 
-static void slave (bmp085_t *const bmp085);
-static void measure_temp_start (bmp085_t *const bmp085);
-static void measure_pres_start (bmp085_t *const bmp085);
-static void measure_temp_finish (bmp085_t *const bmp085);
-static void measure_pres_finish (bmp085_t *const bmp085);
-static bool ready (bmp085_t *const bmp085);
+static bool slave (bmp085_t *const bmp085, error_t *const err);
+static bool measure_temp_start (bmp085_t *const bmp085, error_t *const err);
+static bool measure_pres_start (bmp085_t *const bmp085, error_t *const err);
+static bool measure_temp_finish (bmp085_t *const bmp085, error_t *const err);
+static bool measure_pres_finish (bmp085_t *const bmp085, error_t *const err);
+static bool ready ( bmp085_t *const bmp085, bool *const is_ready
+                  , error_t *const err );
 static void calculate ( const bmp085_t *const bmp085
-                      , int32_t *const t_out, int32_t *const p_out );
+                      , bmp085_result_t *const res );
 
 bmp085_t *
 bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
-           , char **errstr, int *err )
+           , error_t *const err )
 {
   if (oss < 0 || oss > 3) {
-    *errstr = "bmp085_new: Invalid value for oss";
-    *err = 0;
+    error_printf (err, "Invalid value for oss: %u", oss);
     goto invalid_oss;
   }
 
   bmp085_t *bmp085 = malloc (sizeof (bmp085_t));
   if (! bmp085) {
-    *errstr = "bmp085_new: malloc failed";
-    *err = errno;
+    error_strerror (err, errno);
+    error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
 
@@ -82,28 +82,23 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
 
   char eoc_gpio_path[100];
   if (snprintf (eoc_gpio_path, 100, GPIO_PATH, eoc_gpio) < 0) {
-    *errstr = "bmp085_new: snprintf failed";
-    *err = 0;
+    error_copy (err, "snprintf failed");
     goto sprintf_failed;
   }
 
   if ((bmp085->eoc_fd = open (eoc_gpio_path, O_RDONLY)) < 0) {
-    *errstr = "bmp085_new: open gpio value failed";
-    *err = errno;
+    error_strerror (err, errno);
+    error_prefix_printf (err, "open %s failed", eoc_gpio_path);
     goto open_gpio_failed;
   }
 
-  if (! i2c_slave (i2c_fd, ADDR)) {
-    *errstr = "bmp085_new: i2c_slave failed";
-    *err = errno;
-    goto i2c_slave_failed;
-  }
+  if (! slave (bmp085, err))
+    goto slave_failed;
 
   uint16_t calib_data[11];
   for (int i = 0; i < 11; ++i) {
-    if (! i2c_read_u16 (i2c_fd, CALIB_REG+2*i, &calib_data[i])) {
-      *errstr = "bmp085_new: i2c_read_u16 (calibration) failed";
-      *err = errno;
+    if (! i2c_read_u16 (i2c_fd, CALIB_REG+2*i, &calib_data[i], err)) {
+      error_prefix (err, "calibration");
       goto calib_failed;
     }
   }
@@ -122,7 +117,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
   return bmp085;
 
 calib_failed:
-i2c_slave_failed:
+slave_failed:
   close (bmp085->eoc_fd);
 
 open_gpio_failed:
@@ -131,6 +126,7 @@ sprintf_failed:
 
 malloc_failed:
 invalid_oss:
+  error_prefix (err, "bmp085_new");
   return NULL;
 }
 
@@ -168,125 +164,141 @@ bmp085_dump (const bmp085_t *const bmp085, FILE *const stream)
 }
 
 bool
-bmp085_run ( bmp085_t *const bmp085
-           , int32_t *const t_out, int32_t *const p_out )
+bmp085_run ( bmp085_t *const bmp085, bmp085_result_t *const res
+           , error_t *const err )
 {
-  bool ret = false;
+  res->have_result = false;
 
   if (bmp085->state == STATE_INITIAL) {
-    slave (bmp085);
-    if (bmp085->state == STATE_ERROR)
-      return false;
+    if (! (slave (bmp085, err) &&
+           measure_temp_start (bmp085, err)))
+      goto error;
 
-    measure_temp_start (bmp085);
+    bmp085->state = STATE_TEMP_WAITING;
 
   } else if (bmp085->state == STATE_TEMP_WAITING) {
-    if (ready (bmp085)) {
-      slave (bmp085);
-      if (bmp085->state == STATE_ERROR)
-        return false;
+    bool is_ready;
+    if (! ready (bmp085, &is_ready, err))
+      goto error;
 
-      measure_temp_finish (bmp085);
-      measure_pres_start (bmp085);
+    if (is_ready) {
+      if (! (slave (bmp085, err) &&
+             measure_temp_finish (bmp085, err) &&
+             measure_pres_start (bmp085, err)))
+        goto error;
+
+      bmp085->state = STATE_PRES_WAITING;
     }
 
   } else if (bmp085->state == STATE_PRES_WAITING) {
-    if (ready (bmp085)) {
-      slave (bmp085);
-      if (bmp085->state == STATE_ERROR)
-        return false;
+    bool is_ready;
+    if (! ready (bmp085, &is_ready, err)) 
+      goto error;
 
-      measure_pres_finish (bmp085);
-      measure_temp_start (bmp085);
-      ret = true;
+    if (is_ready) {
+      if (! (slave (bmp085, err) &&
+             measure_pres_finish (bmp085, err) &&
+             measure_temp_start (bmp085, err)))
+        goto error;
+
+      bmp085->state = STATE_TEMP_WAITING;
+
+      calculate (bmp085, res);
     }
   }
 
-  if (ret && bmp085->state != STATE_ERROR) {
-    calculate (bmp085, t_out, p_out);
-    return true;
-  } else {
-    return false;
-  }
+  return true;
+
+error:
+  error_prefix (err, "bmp085_run");
+  bmp085->state = STATE_INITIAL;
+  return false;
 }
 
-static inline void
-slave (bmp085_t *const bmp085)
+static inline bool
+slave (bmp085_t *const bmp085, error_t *const err)
 {
-  if (! i2c_slave (bmp085->i2c_fd, ADDR))
-    bmp085->state = STATE_ERROR;
-}
-
-static void
-measure_temp_start (bmp085_t *const bmp085)
-{
-  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, CTRL_TEMP)) {
-    bmp085->state = STATE_ERROR;
-    return;
-  }
-
-  bmp085->state = STATE_TEMP_WAITING;
-}
-
-static void
-measure_pres_start (bmp085_t *const bmp085)
-{
-  uint8_t data = CTRL_PRES + (bmp085->oss << 6);
-  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, data)) {
-    bmp085->state = STATE_ERROR;
-    return;
-  }
-
-  bmp085->state = STATE_PRES_WAITING;
-}
-
-static void
-measure_temp_finish (bmp085_t *const bmp085)
-{
-  uint16_t ut;
-  if (! i2c_read_u16 (bmp085->i2c_fd, DATA, &ut)) {
-    bmp085->state = STATE_ERROR;
-    return;
-  }
-
-  bmp085->ut = ut;
-}
-
-static void
-measure_pres_finish (bmp085_t *const bmp085)
-{
-  uint32_t up;
-  if (! i2c_read_u24 (bmp085->i2c_fd, DATA, &up)) {
-    bmp085->state = STATE_ERROR;
-    return;
-  }
-
-  bmp085->up = up >> (8 - bmp085->oss);
+  return i2c_slave (bmp085->i2c_fd, ADDR, err);
 }
 
 static bool
-ready (bmp085_t *const bmp085)
+measure_temp_start (bmp085_t *const bmp085, error_t *const err)
+{
+  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, CTRL_TEMP, err)) {
+    error_prefix (err, "measure_temp_start");
+    return false;
+  }
+
+  return true;
+}
+
+static bool
+measure_pres_start (bmp085_t *const bmp085, error_t *const err)
+{
+  uint8_t data = CTRL_PRES + (bmp085->oss << 6);
+  if (! i2c_write_u8 (bmp085->i2c_fd, CTRL_REG, data, err)) {
+    error_prefix (err, "measure_pres_start");
+    return false;
+  }
+
+  return true;
+}
+
+static bool
+measure_temp_finish (bmp085_t *const bmp085, error_t *const err)
+{
+  uint16_t ut;
+  if (! i2c_read_u16 (bmp085->i2c_fd, DATA, &ut, err)) {
+    error_prefix (err, "measure_temp_finish");
+    return false;
+  }
+
+  bmp085->ut = ut;
+  return true;
+}
+
+static bool
+measure_pres_finish (bmp085_t *const bmp085, error_t *const err)
+{
+  uint32_t up;
+  if (! i2c_read_u24 (bmp085->i2c_fd, DATA, &up, err)) {
+    error_prefix (err, "measure_pres_finish");
+    return false;
+  }
+
+  bmp085->up = up >> (8 - bmp085->oss);
+  return true;
+}
+
+static bool
+ready (bmp085_t *const bmp085, bool *const is_ready, error_t *const err)
 {
   char buf[100];
   ssize_t count;
 
   if (lseek (bmp085->eoc_fd, 0, SEEK_SET) == -1) {
-    bmp085->state = STATE_ERROR;
-    return false;
+    error_strerror (err, errno);
+    error_prefix (err, "seek failed");
+    goto error;
   }
 
   count = read (bmp085->eoc_fd, buf, 100);
   if (count == -1) {
-    bmp085->state = STATE_ERROR;
-    return false;
+    error_strerror (err, errno);
+    error_prefix (err, "read failed");
+    goto error;
   }
 
-  return count >= 2 && buf[0] == '1' && buf[1] == '\n';
+  *is_ready = count >= 2 && buf[0] == '1' && buf[1] == '\n';
+  return true;
+
+error:
+  error_prefix (err, "ready");
+  return false;
 }
 
 static void
-calculate ( const bmp085_t *const bmp085
-          , int32_t *const t_out, int32_t *const p_out )
+calculate (const bmp085_t *const bmp085, bmp085_result_t *const res)
 {
   int16_t oss = bmp085->oss;
   int32_t ut  = bmp085->ut
@@ -314,6 +326,7 @@ calculate ( const bmp085_t *const bmp085
   int32_t x2e = (-7357 * pa) >> 16;
   int32_t pb  = pa + ((x1e + x2e + 3791) >> 4);
 
-  *t_out = t;
-  *p_out = pb;
+  res->have_result = true;
+  res->temperature = t;
+  res->pressure    = pb;
 }

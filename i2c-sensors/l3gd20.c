@@ -5,6 +5,7 @@
 #include "l3gd20.h"
 
 #include "common.h"
+#include "error-utilities.h"
 #include "i2c-utilities.h"
 
 #define ADDR 0x6b
@@ -87,34 +88,30 @@ struct l3gd20 {
 };
 
 l3gd20_t *
-l3gd20_new (const int i2c_fd, char **errstr, int *err)
+l3gd20_new (const int i2c_fd, error_t *const err)
 {
   l3gd20_t *l3gd20 = malloc (sizeof (l3gd20_t));
   if (! l3gd20) {
-    *errstr = "l3gd20_new: malloc failed";
-    *err = errno;
+    error_strerror (err, errno);
+    error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
 
   l3gd20->fd = i2c_fd;
 
-  if (! i2c_slave (i2c_fd, ADDR)) {
-    *errstr = "l3gd20_new: i2c_slave failed";
-    *err = errno;
+  if (! i2c_slave (i2c_fd, ADDR, err))
     goto i2c_slave_failed;
-  }
 
   uint8_t reg1 = CTRL_REG1_DR1 | CTRL_REG1_DR0 | CTRL_REG1_BW1 | CTRL_REG1_BW0
                | CTRL_REG1_PD  | CTRL_REG1_Zen | CTRL_REG1_Xen | CTRL_REG1_Yen
         , reg4 = CTRL_REG4_BDU | CTRL_REG4_BLE | CTRL_REG4_FS1 | CTRL_REG4_FS0;
-  if (! (i2c_write_u8 (i2c_fd, CTRL_REG1, reg1) &&
-         i2c_write_u8 (i2c_fd, CTRL_REG2, 0)    &&
-         i2c_write_u8 (i2c_fd, CTRL_REG3, 0)    &&
-         i2c_write_u8 (i2c_fd, CTRL_REG4, reg4) &&
-         i2c_write_u8 (i2c_fd, CTRL_REG5, 0)    &&
-         i2c_write_u8 (i2c_fd, FIFO_CTRL_REG, 0))) {
-    *errstr = "l3gd20_new: i2c_write_u8 (initialization) failed";
-    *err = errno;
+  if (! (i2c_write_u8 (i2c_fd, CTRL_REG1, reg1, err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG2, 0,    err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG3, 0,    err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG4, reg4, err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG5, 0,    err) &&
+         i2c_write_u8 (i2c_fd, FIFO_CTRL_REG, 0, err))) {
+    error_prefix (err, "initialization");
     goto init_failed;
   }
 
@@ -125,6 +122,7 @@ i2c_slave_failed:
   free (l3gd20);
 
 malloc_failed:
+  error_prefix (err, "l3gd20_new");
   return NULL;
 }
 
@@ -136,35 +134,42 @@ l3gd20_free (l3gd20_t *const l3gd20)
 }
 
 bool
-l3gd20_run ( l3gd20_t *const l3gd20, double *const x_out
-           , double *const y_out, double *const z_out )
+l3gd20_run ( l3gd20_t *const l3gd20, l3gd20_result_t *const res
+           , error_t *const err )
 {
   uint8_t  status;
   uint16_t x, y, z;
 
-  if (! i2c_slave (l3gd20->fd, ADDR))
-    return false;
+  res->have_result = false;
 
-  if (! i2c_read_u8 (l3gd20->fd, STATUS_REG, &status))
-    return false;
+  if (! i2c_slave (l3gd20->fd, ADDR, err))
+    goto error;
 
+  if (! i2c_read_u8 (l3gd20->fd, STATUS_REG, &status, err))
+    goto error;
+
+  /* No new data available? */
   if (! (status & STATUS_REG_ZYXDA))
-    return false;
+    return true;
 
   /* New data available. */
-  if (! (i2c_read_u16 (l3gd20->fd, OUT_X_L, &x) &&
-         i2c_read_u16 (l3gd20->fd, OUT_Y_L, &y) &&
-         i2c_read_u16 (l3gd20->fd, OUT_Z_L, &z))) {
-    return false;
-  }
+  if (! (i2c_read_u16 (l3gd20->fd, OUT_X_L, &x, err) &&
+         i2c_read_u16 (l3gd20->fd, OUT_Y_L, &y, err) &&
+         i2c_read_u16 (l3gd20->fd, OUT_Z_L, &z, err)))
+    goto error;
 
   /* 70: FS1|FS0
    * 1000: m°/s to °/s
    */
   double scale = 70.0 / 1000.0;
-  *x_out = scale * (int16_t)x;
-  *y_out = scale * (int16_t)y;
-  *z_out = scale * (int16_t)z;
+  res->have_result = true;
+  res->x = scale * (int16_t)x;
+  res->y = scale * (int16_t)y;
+  res->z = scale * (int16_t)z;
 
   return true;
+
+error:
+  error_prefix (err, "l3gd20_run");
+  return false;
 }

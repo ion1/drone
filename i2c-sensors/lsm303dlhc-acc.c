@@ -96,36 +96,32 @@ struct lsm303dlhc_acc {
 };
 
 lsm303dlhc_acc_t *
-lsm303dlhc_acc_new (const int i2c_fd, char **errstr, int *err)
+lsm303dlhc_acc_new (const int i2c_fd, error_t *const err)
 {
   lsm303dlhc_acc_t *acc = malloc (sizeof (lsm303dlhc_acc_t));
   if (! acc) {
-    *errstr = "lsm303dlhc_acc_new: malloc failed";
-    *err = errno;
+    error_strerror (err, errno);
+    error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
 
   acc->fd = i2c_fd;
 
-  if (! i2c_slave (i2c_fd, ADDR)) {
-    *errstr = "lsm303dlhc_acc_new: i2c_slave failed";
-    *err = errno;
+  if (! i2c_slave (i2c_fd, ADDR, err))
     goto i2c_slave_failed;
-  }
 
   uint8_t reg1 = CTRL_REG1_ODR3 | CTRL_REG1_ODR0
                | CTRL_REG1_Zen | CTRL_REG1_Yen | CTRL_REG1_Xen
         , reg4 = CTRL_REG4_BDU | CTRL_REG4_BLE | CTRL_REG4_FS1 | CTRL_REG4_FS0
                | CTRL_REG4_HR;
-  if (! (i2c_write_u8 (i2c_fd, CTRL_REG1, reg1) &&
-         i2c_write_u8 (i2c_fd, CTRL_REG2, 0)    &&
-         i2c_write_u8 (i2c_fd, CTRL_REG3, 0)    &&
-         i2c_write_u8 (i2c_fd, CTRL_REG4, reg4) &&
-         i2c_write_u8 (i2c_fd, CTRL_REG5, 0)    &&
-         i2c_write_u8 (i2c_fd, CTRL_REG6, 0)    &&
-         i2c_write_u8 (i2c_fd, FIFO_CTRL_REG, 0))) {
-    *errstr = "lsm303dlhc_acc_new: i2c_write_u8 (initialization) failed";
-    *err = errno;
+  if (! (i2c_write_u8 (i2c_fd, CTRL_REG1, reg1, err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG2, 0,    err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG3, 0,    err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG4, reg4, err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG5, 0,    err) &&
+         i2c_write_u8 (i2c_fd, CTRL_REG6, 0,    err) &&
+         i2c_write_u8 (i2c_fd, FIFO_CTRL_REG, 0, err))) {
+    error_prefix (err, "initialization");
     goto init_failed;
   }
 
@@ -136,6 +132,7 @@ i2c_slave_failed:
   free (acc);
 
 malloc_failed:
+  error_prefix (err, "lsm303dlhc_acc_new");
   return NULL;
 }
 
@@ -147,36 +144,43 @@ lsm303dlhc_acc_free (lsm303dlhc_acc_t *const acc)
 }
 
 bool
-lsm303dlhc_acc_run ( lsm303dlhc_acc_t *const acc, double *const x_out
-                   , double *const y_out, double *const z_out )
+lsm303dlhc_acc_run ( lsm303dlhc_acc_t *const acc
+                   , lsm303dlhc_acc_result_t *const res, error_t *const err )
 {
   uint8_t  status;
   uint16_t x, y, z;
 
-  if (! i2c_slave (acc->fd, ADDR))
-    return false;
+  res->have_result = false;
 
-  if (! i2c_read_u8 (acc->fd, STATUS_REG, &status))
-    return false;
+  if (! i2c_slave (acc->fd, ADDR, err))
+    goto error;
 
+  if (! i2c_read_u8 (acc->fd, STATUS_REG, &status, err))
+    goto error;
+
+  /* No new data available? */
   if (! (status & STATUS_REG_ZYXDA))
-    return false;
+    return true;
 
   /* New data available. */
-  if (! (i2c_read_u16 (acc->fd, OUT_X_L, &x) &&
-         i2c_read_u16 (acc->fd, OUT_Y_L, &y) &&
-         i2c_read_u16 (acc->fd, OUT_Z_L, &z))) {
-    return false;
-  }
+  if (! (i2c_read_u16 (acc->fd, OUT_X_L, &x, err) &&
+         i2c_read_u16 (acc->fd, OUT_Y_L, &y, err) &&
+         i2c_read_u16 (acc->fd, OUT_Z_L, &z, err)))
+    goto error;
 
   /* 12: FS1|FS0
    * 1<<4: The chip pads values with four zero LSBs
    * 9.80665/1000: mg to m/s²
    */
   double scale = 9.80665 * 12.0 / ((double)(1<<4) * 1000.0);
-  *x_out = scale * (int16_t)x;
-  *y_out = scale * (int16_t)y;
-  *z_out = scale * (int16_t)z;
+  res->have_result = true;
+  res->x = scale * (int16_t)x;
+  res->y = scale * (int16_t)y;
+  res->z = scale * (int16_t)z;
 
   return true;
+
+error:
+  error_prefix (err, "lsm303dlhc_acc_run");
+  return false;
 }

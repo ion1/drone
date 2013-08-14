@@ -1,24 +1,29 @@
 #include <error.h>
 #include <stdio.h>
 
+#include "error-utilities.h"
 #include "i2c-sensors.h"
 
 int
-main (void)
+main (int argc, char **argv)
 {
-  char *errstr = "Unknown error";
-  int err = 0;
+  ERROR_DECLARE (err);
 
-  i2c_sensors_t *sensors = i2c_sensors_new ("/dev/i2c-1", 38, &errstr, &err);
+  i2c_sensors_t *sensors = i2c_sensors_new ("/dev/i2c-1", 38, &err);
   if (! sensors)
-    error_at_line (1, err, __FILE__, __LINE__, errstr);
+    goto error;
 
   i2c_sensors_dump (sensors, stderr);
 
   for (int n = 0; n < 10000; ++n)
-    i2c_sensors_run (sensors);
+    if (! i2c_sensors_run (sensors, &err))
+      goto error;
 
   i2c_sensors_free (sensors);
 
   return 0;
+
+error:
+  fprintf (stderr, "%s: %s\n", argv[0], err.message);
+  return 1;
 }

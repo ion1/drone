@@ -45,30 +45,26 @@ struct lsm303dlhc_mag {
 };
 
 lsm303dlhc_mag_t *
-lsm303dlhc_mag_new (const int i2c_fd, char **errstr, int *err)
+lsm303dlhc_mag_new (const int i2c_fd, error_t *const err)
 {
   lsm303dlhc_mag_t *mag = malloc (sizeof (lsm303dlhc_mag_t));
   if (! mag) {
-    *errstr = "lsm303dlhc_mag_new: malloc failed";
-    *err = errno;
+    error_strerror (err, errno);
+    error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
 
   mag->fd = i2c_fd;
 
-  if (! i2c_slave (i2c_fd, ADDR)) {
-    *errstr = "lsm303dlhc_mag_new: i2c_slave failed";
-    *err = errno;
+  if (! i2c_slave (i2c_fd, ADDR, err))
     goto i2c_slave_failed;
-  }
 
   uint8_t cra = CRA_REG_DO2 | CRA_REG_DO1 | CRA_REG_DO0
         , crb = CRB_REG_GN2 | CRB_REG_GN1 | CRB_REG_GN0;
-  if (! (i2c_write_u8 (i2c_fd, CRA_REG, cra) &&
-         i2c_write_u8 (i2c_fd, CRB_REG, crb) &&
-         i2c_write_u8 (i2c_fd, MR_REG, 0))) {
-    *errstr = "lsm303dlhc_mag_new: i2c_write_u8 (initialization) failed";
-    *err = errno;
+  if (! (i2c_write_u8 (i2c_fd, CRA_REG, cra, err) &&
+         i2c_write_u8 (i2c_fd, CRB_REG, crb, err) &&
+         i2c_write_u8 (i2c_fd, MR_REG,  0,   err))) {
+    error_prefix (err, "initialization");
     goto init_failed;
   }
 
@@ -79,6 +75,7 @@ i2c_slave_failed:
   free (mag);
 
 malloc_failed:
+  error_prefix (err, "lsm303dlhc_mag_new");
   return NULL;
 }
 
@@ -90,35 +87,42 @@ lsm303dlhc_mag_free (lsm303dlhc_mag_t *const mag)
 }
 
 bool
-lsm303dlhc_mag_run ( lsm303dlhc_mag_t *const mag, double *const x_out
-                   , double *const y_out, double *const z_out )
+lsm303dlhc_mag_run ( lsm303dlhc_mag_t *const mag
+                   , lsm303dlhc_mag_result_t *const res, error_t *const err)
 {
   uint8_t  status;
   uint16_t x, y, z;
 
-  if (! i2c_slave (mag->fd, ADDR))
-    return false;
+  res->have_result = false;
 
-  if (! i2c_read_u8 (mag->fd, SR_REG, &status))
-    return false;
+  if (! i2c_slave (mag->fd, ADDR, err))
+    goto error;
 
+  if (! i2c_read_u8 (mag->fd, SR_REG, &status, err))
+    goto error;
+
+  /* No new data available? */
   if (! (status & SR_REG_DRDY))
-    return false;
+    return true;
 
   /* New data available. */
-  if (! (i2c_read_u16 (mag->fd, OUT_X_H, &x) &&
-         i2c_read_u16 (mag->fd, OUT_Z_H, &z) &&
-         i2c_read_u16 (mag->fd, OUT_Y_H, &y))) {
-    return false;
-  }
+  if (! (i2c_read_u16 (mag->fd, OUT_X_H, &x, err) &&
+         i2c_read_u16 (mag->fd, OUT_Z_H, &z, err) &&
+         i2c_read_u16 (mag->fd, OUT_Y_H, &y, err)))
+    goto error;
 
   /* 230, 205: GN2|GN1|GN0
    */
   double scalexy = 1.0/230.0
        , scalez  = 1.0/205.0;
-  *x_out = scalexy * (int16_t)x;
-  *y_out = scalexy * (int16_t)y;
-  *z_out = scalez  * (int16_t)z;
+  res->have_result = true;
+  res->x = scalexy * (int16_t)x;
+  res->y = scalexy * (int16_t)y;
+  res->z = scalez  * (int16_t)z;
 
   return true;
+
+error:
+  error_prefix (err, "lsm303dlhc_mag_run");
+  return false;
 }
