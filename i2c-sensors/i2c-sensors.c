@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -15,6 +16,12 @@
 #include "lsm303dlhc-acc.h"
 #include "lsm303dlhc-mag.h"
 
+/* Air pressure at sea level in Pa.
+ * http://weather.noaa.gov/pub/data/observations/metar/decoded/EFTP.TXT
+ * http://www.aviationweather.gov/adds/metars/?station_ids=EFTP&std_trans=standard&chk_metars=on&hoursStr=past+36+hours&chk_tafs=on&submitmet=Submit
+ */
+#define P_SEA 100500
+
 struct i2c_sensors {
   int fd;
   bmp085_t *bmp085;
@@ -22,6 +29,9 @@ struct i2c_sensors {
   lsm303dlhc_acc_t *lsm303dlhc_acc;
   lsm303dlhc_mag_t *lsm303dlhc_mag;
 };
+
+static inline double
+mag (const double x, const double y, const double z);
 
 i2c_sensors_t *
 i2c_sensors_new ( const char *const dev, const int bmp085_eoc_gpio
@@ -120,25 +130,53 @@ i2c_sensors_run (i2c_sensors_t *const sensors, error_t *const err)
          lsm303dlhc_mag_run (sensors->lsm303dlhc_mag, &mag_res, err)))
     goto error;
 
-  if (baro_res.have_result)
-    fprintf ( stderr, "t=%.1f p=%.0f\n"
-            , baro_res.temperature, baro_res.pressure );
+  printf ("   °C    kPa    m | °/s  (x)  (y)  (z) | "
+          " m/s²    (x)    (y)    (z) |   µT   (x)   (y)   (z)\n");
 
-  if (gyro_res.have_result)
-    fprintf ( stderr, "gx=%.2f gy=%.2f gz=%.2f\n"
-            , gyro_res.x, gyro_res.y, gyro_res.z );
+  if (baro_res.have_result) {
+    double alt = 44330.0 * (1.0 - pow (baro_res.pressure/P_SEA, 1.0/5.255));
+    printf ( "% 5.1f %6.2f % 4.0f | "
+           , baro_res.temperature, baro_res.pressure/1000.0, alt);
+  } else {
+    printf ("%5s %6s %4s | ", "", "", "");
+  }
 
-  if (acc_res.have_result)
-    fprintf ( stderr, "ax=%.2f ay=%.2f az=%.2f\n"
-            , acc_res.x, acc_res.y, acc_res.z );
+  if (gyro_res.have_result) {
+    double c = 180.0/M_PI;
+    printf ( "%3.0f % 4.0f % 4.0f % 4.0f | "
+           , mag (gyro_res.x, gyro_res.y, gyro_res.z)*c
+           , gyro_res.x*c, gyro_res.y*c, gyro_res.z*c );
+  } else {
+    printf ("%3s %4s %4s %4s | ", "", "", "", "");
+  }
 
-  if (mag_res.have_result)
-    fprintf ( stderr, "mx=%.2f my=%.2f mz=%.2f\n"
-            , mag_res.x, mag_res.y, mag_res.z );
+  if (acc_res.have_result) {
+    printf ( "%5.2f % 6.2f % 6.2f % 6.2f | "
+           , mag (acc_res.x, acc_res.y, acc_res.z)
+           , acc_res.x, acc_res.y, acc_res.z );
+  } else {
+    printf ("%5s %6s %6s %6s | ", "", "", "", "");
+  }
+
+  if (mag_res.have_result) {
+    printf ("%4.1f % 5.1f % 5.1f % 5.1f\n"
+           , mag (mag_res.x, mag_res.y, mag_res.z)*1000000
+           , mag_res.x*1000000, mag_res.y*1000000, mag_res.z*1000000);
+  } else {
+    printf ("%4s %5s %5s %5s\n", "", "", "", "");
+  }
+
+  fflush (stdout);
 
   return true;
 
 error:
   error_prefix (err, "i2c_sensors_run");
   return false;
+}
+
+static inline double
+mag (const double x, const double y, const double z)
+{
+  return sqrt (x*x + y*y + z*z);
 }
