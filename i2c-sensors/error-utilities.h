@@ -40,21 +40,24 @@ error_insert (error_t *const err, const char *const str)
 }
 
 static inline void
+error_vprintf (error_t *const err, const char *const format, va_list ap)
+{
+  char buf[ERROR_SIZE];
+  int len = vsnprintf (buf, ERROR_SIZE, format, ap);
+  error_insertn (err, buf, len);
+}
+
+static inline void
 error_printf (error_t *const err, const char *const format, ...)
   __attribute__ ((format (printf, 2, 3)));
 
 static inline void
 error_printf (error_t *const err, const char *const format, ...)
 {
-  char buf[ERROR_SIZE];
-  int len;
-
-  va_list args;
-  va_start (args, format);
-  len = vsnprintf (buf, ERROR_SIZE, format, args);
-  va_end (args);
-
-  error_insertn (err, buf, len);
+  va_list ap;
+  va_start (ap, format);
+  error_vprintf (err, format, ap);
+  va_end (ap);
 }
 
 static inline void
@@ -71,16 +74,12 @@ error_prefix_printf (error_t *const err, const char *const format, ...)
 static inline void
 error_prefix_printf (error_t *const err, const char *const format, ...)
 {
-  char buf[ERROR_SIZE];
-  int len;
-
-  va_list args;
-  va_start (args, format);
-  len = vsnprintf (buf, ERROR_SIZE, format, args);
-  va_end (args);
-
   error_insertn (err, ": ", 2);
-  error_insertn (err, buf, len);
+
+  va_list ap;
+  va_start (ap, format);
+  error_vprintf (err, format, ap);
+  va_end (ap);
 }
 
 static inline void
