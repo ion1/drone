@@ -1,6 +1,5 @@
 /* BMP085 barometer */
 
-#include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -72,7 +71,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
 
   bmp085_t *bmp085 = malloc (sizeof (bmp085_t));
   if (! bmp085) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
@@ -89,7 +88,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
   }
 
   if ((bmp085->eoc_fd = open (eoc_gpio_path, O_RDONLY)) < 0) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix_printf (err, "open %s failed", eoc_gpio_path);
     goto open_gpio_failed;
   }
@@ -279,14 +278,14 @@ ready (bmp085_t *const bmp085, bool *const is_ready, error_t *const err)
   ssize_t count;
 
   if (lseek (bmp085->eoc_fd, 0, SEEK_SET) == -1) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "seek failed");
     goto error;
   }
 
   count = read (bmp085->eoc_fd, buf, 100);
   if (count == -1) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "read failed");
     goto error;
   }

@@ -3,7 +3,6 @@
  * The same as HMC5883L?
  */
 
-#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -52,7 +51,7 @@ lsm303dlhc_mag_new (const int i2c_fd, error_t *const err)
 {
   lsm303dlhc_mag_t *mag = malloc (sizeof (lsm303dlhc_mag_t));
   if (! mag) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "malloc failed");
     goto malloc_failed;
   }

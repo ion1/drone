@@ -1,4 +1,3 @@
-#include <errno.h>
 #include <fcntl.h>
 #include <math.h>
 #include <stdint.h>
@@ -39,13 +38,13 @@ i2c_sensors_new ( const char *const dev, const int bmp085_eoc_gpio
 {
   i2c_sensors_t *sensors = malloc (sizeof (i2c_sensors_t));
   if (! sensors) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "malloc failed");
     goto malloc_failed;
   }
 
   if ((sensors->fd = open (dev, O_RDWR)) < 0) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix_printf (err, "open %s failed", dev);
     goto open_failed;
   }

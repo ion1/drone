@@ -1,6 +1,5 @@
 /* LSM303DLHC accelerometer */
 
-#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -102,7 +101,7 @@ lsm303dlhc_acc_new (const int i2c_fd, error_t *const err)
 {
   lsm303dlhc_acc_t *acc = malloc (sizeof (lsm303dlhc_acc_t));
   if (! acc) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "malloc failed");
     goto malloc_failed;
   }

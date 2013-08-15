@@ -1,6 +1,5 @@
 /* L3GD20 gyroscope */
 
-#include <errno.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -95,7 +94,7 @@ l3gd20_new (const int i2c_fd, error_t *const err)
 {
   l3gd20_t *l3gd20 = malloc (sizeof (l3gd20_t));
   if (! l3gd20) {
-    error_strerror (err, errno);
+    error_errno (err);
     error_prefix (err, "malloc failed");
     goto malloc_failed;
   }

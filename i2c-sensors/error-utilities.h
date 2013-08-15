@@ -1,6 +1,7 @@
 #ifndef INCLUDE_ERROR_UTILITIES_H
 #define INCLUDE_ERROR_UTILITIES_H
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -98,6 +99,12 @@ error_strerror (error_t *const err, int errnum)
   (void)res;
 
   error_insert (err, buf);
+}
+
+static inline void
+error_errno (error_t *const err)
+{
+  error_strerror (err, errno);
 }
 
 #endif /* INCLUDE_ERROR_UTILITIES_H */
