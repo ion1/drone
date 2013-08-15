@@ -84,7 +84,7 @@ bmp085_new ( const int i2c_fd, const int eoc_gpio, const int16_t oss
 
   char eoc_gpio_path[100];
   if (snprintf (eoc_gpio_path, 100, GPIO_PATH, eoc_gpio) < 0) {
-    error_copy (err, "snprintf failed");
+    error_insert (err, "snprintf failed");
     goto sprintf_failed;
   }
 
